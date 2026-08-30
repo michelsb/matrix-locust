@@ -1,0 +1,11 @@
+{
+    "name": "create_room",
+    "script": "matrix_locust/client_server/create_room.py",
+    "pre_script_command": ["scripts/start-monitoring.sh"],
+    "pre_script_command_args": ["create_room"],
+    "post_script_command": ["scripts/stop-monitoring.sh"],
+    "post_script_command_args": ["create_room"],
+    "num_users": 25,
+    "spawn_rate": 1,
+    "autoquit": 5
+}

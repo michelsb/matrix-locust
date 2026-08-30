@@ -1,0 +1,72 @@
+{
+    "scripts": [
+        {
+            "parameter_import": "test-suites/parameters/small-server-register.json",
+            "pre_script_command_args": ["100 dendrite full-setup-sqlite copy-users", "register"],
+            "runtime": "1m",
+            "output_dir": "data/dendrite-sqlite/100/t1"
+        },
+        {
+            "parameter_import": "test-suites/parameters/small-server-create_room.json",
+            "runtime": "1m",
+            "output_dir": "data/dendrite-sqlite/100/t1"
+        },
+        {
+            "parameter_import": "test-suites/parameters/small-server-join.json",
+            "runtime": "1m",
+            "output_dir": "data/dendrite-sqlite/100/t1"
+        },
+        {
+            "parameter_import": "test-suites/parameters/small-server-chat.json",
+            "num_users": 100,
+            "runtime": "6m",
+            "output_dir": "data/dendrite-sqlite/100/t1"
+        },
+
+        {
+            "parameter_import": "test-suites/parameters/small-server-register.json",
+            "pre_script_command_args": ["100 dendrite reset-sqlite copy-users", "register"],
+            "runtime": "1m",
+            "output_dir": "data/dendrite-sqlite/100/t2"
+        },
+        {
+            "parameter_import": "test-suites/parameters/small-server-create_room.json",
+            "runtime": "1m",
+            "output_dir": "data/dendrite-sqlite/100/t2"
+        },
+        {
+            "parameter_import": "test-suites/parameters/small-server-join.json",
+            "runtime": "1m",
+            "output_dir": "data/dendrite-sqlite/100/t2"
+        },
+        {
+            "parameter_import": "test-suites/parameters/small-server-chat.json",
+            "num_users": 100,
+            "runtime": "6m",
+            "output_dir": "data/dendrite-sqlite/100/t2"
+        },
+
+        {
+            "parameter_import": "test-suites/parameters/small-server-register.json",
+            "pre_script_command_args": ["100 dendrite reset-sqlite copy-users", "register"],
+            "runtime": "1m",
+            "output_dir": "data/dendrite-sqlite/100/t3"
+        },
+        {
+            "parameter_import": "test-suites/parameters/small-server-create_room.json",
+            "runtime": "1m",
+            "output_dir": "data/dendrite-sqlite/100/t3"
+        },
+        {
+            "parameter_import": "test-suites/parameters/small-server-join.json",
+            "runtime": "1m",
+            "output_dir": "data/dendrite-sqlite/100/t3"
+        },
+        {
+            "parameter_import": "test-suites/parameters/small-server-chat.json",
+            "num_users": 100,
+            "runtime": "6m",
+            "output_dir": "data/dendrite-sqlite/100/t3"
+        }
+    ]
+}

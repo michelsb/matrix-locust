@@ -1,0 +1,10 @@
+{
+    "name": "register",
+    "script": "matrix_locust/client_server/register.py",
+    "pre_script_command": ["scripts/server-setup.sh", "scripts/start-monitoring.sh"],
+    "post_script_command": ["scripts/stop-monitoring.sh"],
+    "post_script_command_args": ["register"],
+    "num_users": 250,
+    "spawn_rate": 10,
+    "autoquit": 5
+}

@@ -1,0 +1,11 @@
+{
+    "name": "join",
+    "script": "matrix_locust/client_server/join.py",
+    "pre_script_command": ["scripts/start-monitoring.sh"],
+    "pre_script_command_args": ["join"],
+    "post_script_command": ["scripts/stop-monitoring.sh"],
+    "post_script_command_args": ["join"],
+    "num_users": 25,
+    "spawn_rate": 1,
+    "autoquit": 5
+}

@@ -1,0 +1,10 @@
+{
+    "name": "chat",
+    "script": "matrix_locust/client_server/matrixchatuser.py",
+    "pre_script_command": ["scripts/start-monitoring.sh"],
+    "pre_script_command_args": ["chat"],
+    "post_script_command": ["scripts/stop-monitoring.sh"],
+    "post_script_command_args": ["chat remove-tokens"],
+    "spawn_rate": 4,
+    "autoquit": 5
+}
