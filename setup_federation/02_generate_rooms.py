@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Passo 2/7 (federação) — Gera as salas MISTAS (com usuários dos 2 homeservers).
+Passo 2/7 (federação) — Gera salas mistas entre os homeservers configurados.
 
 Este é o passo que efetivamente "cria" o cenário de federação. Uma sala
 só gera tráfego federado se tiver membros de mais de um homeserver:
@@ -90,7 +90,7 @@ def main():
     missing = [k for k in fedcfg.keys if not by_hs.get(k)]
     if missing:
         sys.exit(f"ERRO: não há usuários para o(s) homeserver(s) {missing}. "
-                  f"Sem usuários dos dois lados não existe federação para testar. "
+                  f"Sem usuários de todos os participantes não é possível gerar as salas. "
                   f"Confira os prefixos em .env e rode o passo 1 novamente.")
 
     for key in fedcfg.keys:

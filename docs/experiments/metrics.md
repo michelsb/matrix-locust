@@ -4,6 +4,9 @@ Cada célula gera `samples.csv`; ao fim da campanha, `all_samples.csv` reúne as
 seis combinações fatoriais. As consultas PromQL efetivamente usadas também são
 gravadas no `metadata.json` de cada célula.
 
+Navegação: [experimentos](design.md) · [runbook](runbook.md) ·
+[carga federada](federation.md) · [solução de problemas](../troubleshooting.md)
+
 ## Auditoria do workload
 
 Além das métricas temporais, cada célula grava `workload_stats.json` diretamente
@@ -56,6 +59,8 @@ use os p95 específicos de cada endpoint.
 
 Todas são consultadas no Prometheus para o label `instance` passado ao
 executor. `WINDOW` corresponde a `--cpu-rate-window`, 30 s por padrão.
+Quando a campanha usa `--no-prometheus`, estas colunas não são criadas; somente
+as métricas do Locust são analisadas.
 
 | Coluna | Métrica de origem | Agregação/unidade | Interpretação |
 |---|---|---|---|

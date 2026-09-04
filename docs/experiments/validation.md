@@ -1,14 +1,17 @@
-# Runbook: validar e executar o experimento
+# Checklist de validação do ambiente
 
 Este guia descreve como validar o ambiente com uma carga curta e, depois,
 executar a campanha fatorial com a configuração recomendada.
 
 ## Navegação
 
-- [README principal](../README.md)
-- [Setup de um homeserver](../setup_homeserver/README.md)
-- [Desenho e opções do experimento](README.md)
-- [Métricas e configuração do Prometheus](METRICS.md)
+- [README principal](../../README.md)
+- [Setup de um homeserver](../setup/homeserver.md)
+- [Desenho e opções do experimento](design.md)
+- [Comandos prontos de execução](runbook.md)
+- [Carga em homeservers federados](federation.md)
+- [Métricas e configuração do Prometheus](metrics.md)
+- [Solução de problemas](../troubleshooting.md)
 
 ## Configuração recomendada
 
@@ -253,43 +256,16 @@ URL da API cliente.
 
 ## 5. Campanha fatorial recomendada
 
-Depois que o smoke test passar e os targets Prometheus estiverem no estado
-esperado, execute:
-
-```bash
-poetry run python experiments/run_factorial.py \
-  --host https://matrix-test.atlab.ufc.br \
-  --prometheus-url http://172.27.176.1:9091 \
-  --instance matrix-test.atlab.ufc.br \
-  --data-dir data/homeserver \
-  --loads 50 100 150 \
-  --workloads text_only text_and_image \
-  --spawn-rate 5 \
-  --message-rate 0.2 \
-  --image-ratio 0.15 \
-  --text-length-profile fixed \
-  --text-length-words 10 \
-  --sync-timeout 30 \
-  --repetitions 5 \
-  --stabilization 60 \
-  --measurement-duration 120 \
-  --samples 31 \
-  --cooldown 60 \
-  --progress-interval 10 \
-  --seed 42 \
-  --output-dir results/factorial-recommended
-```
+Depois que o smoke test e os targets passarem, use o comando
+[Fatorial recomendado com Prometheus](runbook.md#fatorial-recomendado-com-prometheus).
 
 Não reutilize `results/smoke-test`, pois suas fases e cargas são diferentes.
 
 ## 6. Interromper e retomar
 
-`Ctrl+C` encerra o processo Locust atual. Para retomar sem repetir células que
-já possuem `samples.csv`, execute o mesmo comando da campanha acrescentando:
-
-```text
---skip-existing
-```
+`Ctrl+C` encerra o processo Locust atual. Siga a receita
+[Retomar uma campanha](runbook.md#retomar-uma-campanha) para não repetir células
+que já possuem `samples.csv`.
 
 Não altere seed, dataset, fatores ou parâmetros ao retomar. O executor mantém
 a mesma ordem randomizada e combina as células concluídas no final.
@@ -308,6 +284,6 @@ Antes de interpretar ANOVA e Tukey, confirme:
 - tabelas ANOVA e Tukey em `analysis/`;
 - três observações por célula em `analysis/run_summaries.csv`.
 
-Consulte [Métricas, origem e análise estatística](METRICS.md) para interpretar
-cada coluna e [Experimentos fatoriais de carga](README.md) para entender o
+Consulte [Métricas, origem e análise estatística](metrics.md) para interpretar
+cada coluna e [Experimentos fatoriais de carga](design.md) para entender o
 modelo estatístico.

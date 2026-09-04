@@ -105,8 +105,11 @@ def main():
         data_dir = args.outdir / args.activate
         log.info("Dataset selecionado: %s", data_dir)
         log.info("Rode o teste de carga com:")
-        log.info("  MATRIX_DATA_DIR=%s poetry run python run.py locust-run-users.py --host %s",
-                 data_dir, hs.url)
+        log.info(
+            "  poetry run python experiments/run_factorial.py --host %s "
+            "--data-dir %s --no-prometheus",
+            hs.url, data_dir,
+        )
     else:
         log.info("Para ativar um homeserver para o teste de carga, rode:")
         log.info("  poetry run python setup_federation/06_export_locust_files.py --activate %s",

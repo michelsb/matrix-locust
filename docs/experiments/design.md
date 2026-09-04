@@ -1,4 +1,4 @@
-# Experimentos fatoriais de carga
+# Desenho dos experimentos fatoriais de carga
 
 Este diretório automatiza a execução, a coleta e a análise do experimento
 fatorial completo do Matrix Synapse. O executor combina três níveis de carga
@@ -7,15 +7,17 @@ gera tabelas, gráficos, ANOVA e comparações de Tukey.
 
 ## Navegação
 
-- [Guia principal](../README.md): instalação, visão geral e início rápido.
-- [Setup de um homeserver](../setup_homeserver/README.md): cria usuários,
+- [Guia principal](../../README.md): instalação, visão geral e início rápido.
+- [Setup de um homeserver](../setup/homeserver.md): cria usuários,
   tokens e salas para este experimento.
-- [Setup de federação](../setup_federation/README.md): prepara dois
+- [Setup de federação](../setup/federation.md): prepara dois
   homeservers; não é necessário para o fatorial descrito aqui.
-- [Catálogo de métricas](METRICS.md): origem, unidade e PromQL de cada coluna,
+- [Catálogo de métricas](metrics.md): origem, unidade e PromQL de cada coluna,
   além da configuração recomendada do Prometheus.
-- [Runbook de testes](TESTING.md): preflight, smoke test e comando completo da
-  campanha recomendada.
+- [Runbook](runbook.md): comandos para smoke, carga baixa, fatorial e stress.
+- [Carga federada](federation.md): um processo por homeserver e carga global.
+- [Solução de problemas](../troubleshooting.md): diagnóstico por sintoma.
+- [Checklist de validação](validation.md): preflight detalhado do ambiente.
 
 ## Desenho experimental
 
@@ -112,68 +114,22 @@ Não misture resultados dos modos controlado e máximo na mesma análise.
    poetry install
    ```
 
-2. Conclua o [setup de um homeserver](../setup_homeserver/README.md). O diretório
+2. Conclua o [setup de um homeserver](../setup/homeserver.md). O diretório
    `data/homeserver/` deve conter pelo menos `users.csv` e `tokens.csv`.
 3. Coloque pelo menos um arquivo `.jpg` em `images/` para executar
    `text_and_image`.
-4. Confirme que o Prometheus está acessível. Neste ambiente ele responde em
+4. Se desejar métricas remotas, confirme que o Prometheus está acessível. Neste ambiente ele responde em
    `http://172.27.176.1:9091`; informe esse endereço com `--prometheus-url`
    (o fallback padrão do programa continua sendo `http://127.0.0.1:9091`).
 5. Para que os 31 pontos tenham resolução real na janela de 120 s, configure o
    scrape interval do job experimental em 2 s, conforme
-   [METRICS.md](METRICS.md#configuração-do-scrape-interval).
+   [metrics.md](metrics.md#configuração-do-scrape-interval).
 
 ## Executar a campanha
 
-Execução padrão, com três repetições por célula:
-
-```bash
-poetry run python experiments/run_factorial.py \
-  --host https://matrix-test.atlab.ufc.br \
-  --prometheus-url http://172.27.176.1:9091
-```
-
-Com cinco repetições independentes:
-
-```bash
-poetry run python experiments/run_factorial.py \
-  --host https://matrix-test.atlab.ufc.br \
-  --prometheus-url http://172.27.176.1:9091 \
-  --repetitions 5
-```
-
-Com ritmo diferente e 20% de imagens:
-
-```bash
-poetry run python experiments/run_factorial.py \
-  --host https://matrix-test.atlab.ufc.br \
-  --message-rate 0.1 \
-  --image-ratio 0.20
-```
-
-Teste separado de capacidade máxima:
-
-```bash
-poetry run python experiments/run_factorial.py \
-  --host https://matrix-test.atlab.ufc.br \
-  --max-throughput \
-  --output-dir results/max-throughput
-```
-
-Para validar primeiro uma única célula:
-
-```bash
-poetry run python experiments/run_factorial.py \
-  --host https://matrix-test.atlab.ufc.br \
-  --loads 50 \
-  --workloads text_only \
-  --repetitions 1 \
-  --output-dir results/smoke-test
-```
-
-Se uma campanha for interrompida, repita o mesmo comando acrescentando
-`--skip-existing`. Células que já possuam `samples.csv` serão preservadas e
-ignoradas.
+Os comandos operacionais ficam centralizados no [runbook](runbook.md), com
+receitas para smoke test, carga baixa, fatorial com ou sem Prometheus, stress e
+retomada. Para múltiplos homeservers, use [federation.md](federation.md).
 
 ## Opções principais
 
@@ -194,6 +150,7 @@ ignoradas.
 | `--stabilization` | `60` | Estabilização após atingir a carga |
 | `--measurement-duration` | `120` | Duração da janela medida |
 | `--samples` | `31` | Pontos temporais por execução |
+| `--no-prometheus` | desativado | Executa sem preflight nem métricas remotas |
 | `--cpu-rate-window` | `30s` | Janela usada por `rate()` no Prometheus |
 | `--data-dir` | `data/homeserver` | Dataset do setup |
 | `--output-dir` | `results` | Destino de resultados e análises |
@@ -337,7 +294,7 @@ poetry run python experiments/analyze_results.py results/all_samples.csv \
 ```
 
 Para interpretar cada métrica e conferir sua origem, continue em
-[Métricas, origem e análise estatística](METRICS.md).
+[Métricas, origem e análise estatística](metrics.md).
 
 ## Boas práticas de comparação
 

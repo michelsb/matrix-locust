@@ -55,6 +55,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", required=True, help="Matrix base URL")
     parser.add_argument("--prometheus-url", default="http://127.0.0.1:9091")
+    parser.add_argument("--no-prometheus", dest="collect_prometheus", action="store_false",
+                        help="Run with Locust metrics only; skip Prometheus entirely")
+    parser.set_defaults(collect_prometheus=True)
     parser.add_argument("--instance", default="matrix-test.atlab.ufc.br")
     parser.add_argument("--spawn-rate", type=float, default=5.0)
     parser.add_argument("--message-rate", type=float, default=0.2,
@@ -317,6 +320,7 @@ def write_samples(path: Path, locust_rows: list[dict], locust_history: list[dict
                   cpu: dict[float, dict[str, float]],
                   synapse_metrics: dict[str, dict[float, float]], metadata: dict) -> None:
     jobs = sorted({job for values in cpu.values() for job in values})
+    include_prometheus = bool(cpu) or bool(synapse_metrics)
     fields = [
         "sample", "timestamp", "users", "workload", "repetition", "rps",
         "failures_per_second", "avg_response_time_ms", "median_response_time_ms",
@@ -324,9 +328,10 @@ def write_samples(path: Path, locust_rows: list[dict], locust_history: list[dict
         "foreground_avg_response_time_ms",
         *[f"{prefix}_{suffix}" for prefix in LOCUST_ENDPOINTS
           for suffix in ("rps", "avg_response_time_ms", "p95_response_time_ms")],
-        "cpu_total_percent", *SYNAPSE_METRICS,
-        *[f"cpu_{job}_percent" for job in jobs],
     ]
+    if include_prometheus:
+        fields.extend(["cpu_total_percent", *SYNAPSE_METRICS])
+        fields.extend(f"cpu_{job}_percent" for job in jobs)
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()
@@ -344,12 +349,13 @@ def write_samples(path: Path, locust_rows: list[dict], locust_history: list[dict
                 "avg_response_time_ms": locust_row.get("Total Average Response Time", ""),
                 "median_response_time_ms": locust_row.get("Total Median Response Time", ""),
                 "p95_response_time_ms": locust_row.get("95%", ""),
-                "cpu_total_percent": sum(cpu_values.values()),
             }
-            row.update({f"cpu_{job}_percent": cpu_values.get(job, "") for job in jobs})
             row.update(locust_breakdown(locust_history, timestamp))
-            row.update({name: nearest_scalar(values, timestamp)
-                        for name, values in synapse_metrics.items()})
+            if include_prometheus:
+                row["cpu_total_percent"] = sum(cpu_values.values())
+                row.update({f"cpu_{job}_percent": cpu_values.get(job, "") for job in jobs})
+                row.update({name: nearest_scalar(synapse_metrics.get(name, {}), timestamp)
+                            for name in SYNAPSE_METRICS})
             writer.writerow(row)
 
 
@@ -407,6 +413,7 @@ def run_cell(args: argparse.Namespace, users: int, workload: str, repetition: in
         "stabilization_seconds": args.stabilization,
         "measurement_duration_seconds": args.measurement_duration,
         "collection_buffer_seconds": args.collection_buffer,
+        "collect_prometheus": args.collect_prometheus,
         "run_time_seconds": run_time_seconds, "samples": args.samples,
         "started_epoch": started, "command": command,
         "dataset": args.dataset_manifest,
@@ -458,40 +465,51 @@ def run_cell(args: argparse.Namespace, users: int, workload: str, repetition: in
     measure_end = measure_start + args.measurement_duration
     history = sample_history(all_history, measure_start, measure_end, args.samples)
     step = (measure_end - measure_start) / (args.samples - 1)
-    query = (
-        f'sum by (job) (rate(process_cpu_seconds_total{{instance="{args.instance}"}}'
-        f'[{args.cpu_rate_window}])) * 100'
-    )
-    log_event("collect", f"{name}: consultando CPU no Prometheus")
-    cpu_series = prometheus_query_range(args.prometheus_url, query, measure_start, measure_end, step)
-    if not cpu_series:
-        raise RuntimeError(
-            "Prometheus returned no process_cpu_seconds_total series for "
-            f"instance={args.instance!r}"
-        )
-    observed_jobs = sorted({
-        item.get("metric", {}).get("job", "unknown") for item in cpu_series
-    })
-    log_event(
-        "collect",
-        f"{name}: {len(observed_jobs)} jobs com CPU: {', '.join(observed_jobs)}",
-    )
-    metric_queries = {
-        name: template.replace("INSTANCE", args.instance).replace("WINDOW", args.cpu_rate_window)
-        for name, template in SYNAPSE_METRICS.items()
-    }
+    query = None
+    cpu_series = []
+    observed_jobs = []
+    metric_queries = {}
     synapse_metrics = {}
-    for metric_index, (metric_name, metric_query) in enumerate(metric_queries.items(), 1):
+    if args.collect_prometheus:
+        query = (
+            f'sum by (job) (rate(process_cpu_seconds_total{{instance="{args.instance}"}}'
+            f'[{args.cpu_rate_window}])) * 100'
+        )
+        log_event("collect", f"{name}: consultando CPU no Prometheus")
+        cpu_series = prometheus_query_range(
+            args.prometheus_url, query, measure_start, measure_end, step
+        )
+        if not cpu_series:
+            raise RuntimeError(
+                "Prometheus returned no process_cpu_seconds_total series for "
+                f"instance={args.instance!r}"
+            )
+        observed_jobs = sorted({
+            item.get("metric", {}).get("job", "unknown") for item in cpu_series
+        })
         log_event(
             "collect",
-            f"{name}: métrica Synapse {metric_index}/{len(metric_queries)} ({metric_name})",
+            f"{name}: {len(observed_jobs)} jobs com CPU: {', '.join(observed_jobs)}",
         )
-        series = prometheus_query_range(
-            args.prometheus_url, metric_query, measure_start, measure_end, step
-        )
-        synapse_metrics[metric_name] = scalar_by_timestamp(series)
-        if not synapse_metrics[metric_name]:
-            log_event("warning", f"Prometheus não retornou valores para {metric_name}")
+        metric_queries = {
+            metric_name: template.replace("INSTANCE", args.instance).replace(
+                "WINDOW", args.cpu_rate_window
+            )
+            for metric_name, template in SYNAPSE_METRICS.items()
+        }
+        for metric_index, (metric_name, metric_query) in enumerate(metric_queries.items(), 1):
+            log_event(
+                "collect",
+                f"{name}: métrica Synapse {metric_index}/{len(metric_queries)} ({metric_name})",
+            )
+            series = prometheus_query_range(
+                args.prometheus_url, metric_query, measure_start, measure_end, step
+            )
+            synapse_metrics[metric_name] = scalar_by_timestamp(series)
+            if not synapse_metrics[metric_name]:
+                log_event("warning", f"Prometheus não retornou valores para {metric_name}")
+    else:
+        log_event("collect", f"{name}: coleta do Prometheus desabilitada")
     write_samples(
         samples_path, history, all_history, cpu_by_timestamp(cpu_series), synapse_metrics, metadata
     )
@@ -538,11 +556,12 @@ def main() -> int:
     if missing:
         sys.exit(f"Dataset {args.data_dir} is missing: {', '.join(missing)}")
     args.dataset_manifest = dataset_manifest(args.data_dir)
-    # Fail before an 18-minute matrix if Prometheus itself is unavailable.
-    try:
-        prometheus_query_range(args.prometheus_url, "up", time.time() - 10, time.time(), 10)
-    except Exception as exc:
-        sys.exit(f"Prometheus preflight failed: {exc}")
+    # Fail before a long campaign only when remote metrics were requested.
+    if args.collect_prometheus:
+        try:
+            prometheus_query_range(args.prometheus_url, "up", time.time() - 10, time.time(), 10)
+        except Exception as exc:
+            sys.exit(f"Prometheus preflight failed: {exc}")
     args.output_dir.mkdir(parents=True, exist_ok=True)
     CAMPAIGN_LOG_PATH = args.output_dir / "campaign.log"
     (args.output_dir / "dataset_manifest.json").write_text(

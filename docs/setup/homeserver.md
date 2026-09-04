@@ -2,8 +2,11 @@
 
 Este pipeline cria a massa usada pelo Locust em testes contra um único
 homeserver Matrix. Para voltar ao ponto de entrada, consulte o
-[README principal](../README.md). Para executar a carga depois do setup, siga o
-[guia de experimentos](../experiments/README.md).
+[README principal](../../README.md). Para executar a carga depois do setup, siga o
+[guia de experimentos](../experiments/design.md).
+Para gerar carga simultânea em dois ou mais servidores, use o
+[setup de federação](federation.md) e o
+[guia de carga federada](../experiments/federation.md).
 
 ## O que é gerado
 
@@ -143,23 +146,10 @@ test -s data/homeserver/tokens.csv
 test -s data/homeserver/rooms.json
 ```
 
-Depois execute uma célula curta:
-
-```console
-poetry run python experiments/run_factorial.py \
-  --host https://matrix-test.example.com \
-  --data-dir data/homeserver \
-  --loads 50 \
-  --workloads text_only \
-  --repetitions 1 \
-  --stabilization 10 \
-  --measurement-duration 20 \
-  --samples 6 \
-  --skip-analysis
-```
-
-Para a campanha completa, consulte
-[`experiments/README.md`](../experiments/README.md).
+Quando os três arquivos existirem, execute o
+[smoke test do runbook](../experiments/runbook.md#smoke-test-sem-prometheus).
+Os demais comandos de carga ficam no mesmo documento; o desenho e a análise
+estatística estão no [desenho experimental](../experiments/design.md).
 
 ## Recomeçar ou manter múltiplas massas
 
@@ -174,23 +164,7 @@ pipeline novamente. Nunca apague toda a raiz do projeto.
 
 ## Problemas comuns
 
-### HTTP 429 / `M_LIMIT_EXCEEDED`
-
-O Synapse está limitando o setup. Reduza `WORKERS`, aumente `REQUEST_SLEEP` ou
-ajuste os rate limits no ambiente de teste.
-
-### `M_USER_IN_USE`
-
-O usuário já existe. O registro tenta fazer login para recuperar um token;
-normalmente basta reexecutar o passo 3.
-
-### Certificado autoassinado
-
-Use `VERIFY_TLS=false` somente em laboratório.
-
-### Arquivos apareceram fora de `data/`
-
-Confira se o `.env` define `USERS_CSV` ou outro caminho individual antigo.
+Consulte [troubleshooting.md](../troubleshooting.md#setup-de-usuários).
 
 ## Segurança
 

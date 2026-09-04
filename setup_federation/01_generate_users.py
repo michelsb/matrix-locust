@@ -75,15 +75,18 @@ def main():
 
     num_hs = len(fedcfg.homeservers)
     if args.per_homeserver is not None:
-        per_hs = args.per_homeserver
+        counts = {key: args.per_homeserver for key in fedcfg.keys}
     else:
         total = args.num_users or default_total
-        per_hs = total // num_hs
-        if per_hs * num_hs != total:
-            log.warning("%d usuários não divide igualmente entre %d homeservers; "
-                        "usando %d por homeserver (total %d).",
-                        total, num_hs, per_hs, per_hs * num_hs)
-    if per_hs < 1:
+        per_hs, remainder = divmod(total, num_hs)
+        counts = {
+            key: per_hs + (1 if index < remainder else 0)
+            for index, key in enumerate(fedcfg.keys)
+        }
+        if remainder:
+            log.info("%d usuários distribuídos entre %d homeservers (%d recebem um "
+                     "usuário adicional).", total, num_hs, remainder)
+    if min(counts.values(), default=0) < 1:
         sys.exit("ERRO: é preciso pelo menos 1 usuário por homeserver.")
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -92,6 +95,7 @@ def main():
         writer = csv.DictWriter(csvfile, fieldnames=["username", "password"])
         writer.writeheader()
         for hs in fedcfg.homeservers.values():
+            per_hs = counts[hs.key]
             for i in range(per_hs):
                 username = f"{hs.prefix}.{i:0{args.pad}d}"
                 writer.writerow({"username": username, "password": generate_password()})

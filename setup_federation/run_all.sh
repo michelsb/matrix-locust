@@ -21,10 +21,10 @@ cd "${REPO_ROOT}"
 NUM_USERS="${1:-}"
 PYTHON=(poetry run python)
 
-echo "==> [1/7] Gerando usuários dos dois homeservers..."
+echo "==> [1/7] Gerando usuários dos homeservers configurados..."
 "${PYTHON[@]}" "${SCRIPT_DIR}/01_generate_users.py" ${NUM_USERS}
 
-echo "==> [2/7] Gerando salas mistas (membros dos dois homeservers)..."
+echo "==> [2/7] Gerando salas mistas entre os homeservers..."
 "${PYTHON[@]}" "${SCRIPT_DIR}/02_generate_rooms.py"
 
 echo "==> [3/7] Registrando cada usuário no seu homeserver..."
@@ -56,4 +56,4 @@ echo "      exports/<homeserver>/users.csv, exports/<homeserver>/tokens.csv"
 echo
 echo "    Próximo passo: ative um homeserver e rode o teste de carga."
 echo "      poetry run python setup_federation/06_export_locust_files.py --activate home01"
-echo "      poetry run python run.py locust-run-users.py --host <URL do home01>"
+echo "      poetry run python experiments/run_factorial.py --host <URL do home01> --data-dir data/federation/exports/home01 --no-prometheus"

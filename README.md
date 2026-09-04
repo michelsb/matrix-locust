@@ -8,11 +8,16 @@ métricas do Locust e do Prometheus e produz gráficos, ANOVA e Tukey HSD.
 
 | Objetivo | Guia |
 |---|---|
-| Preparar e testar um único Synapse | [Setup de homeserver](setup_homeserver/README.md) |
-| Preparar salas entre dois ou mais homeservers | [Setup de federação](setup_federation/README.md) |
-| Executar o fatorial 3×2 e analisar resultados | [Experimentos](experiments/README.md) |
-| Validar o ambiente e executar a campanha recomendada | [Runbook de testes](experiments/TESTING.md) |
-| Consultar origem e unidade das métricas | [Catálogo de métricas](experiments/METRICS.md) |
+| Navegar por toda a documentação | [Índice](docs/README.md) |
+| Preparar e testar um único Synapse | [Setup de homeserver](docs/setup/homeserver.md) |
+| Preparar salas entre dois ou mais homeservers | [Setup de federação](docs/setup/federation.md) |
+| Executar o fatorial 3×2 e analisar resultados | [Experimentos](docs/experiments/design.md) |
+| Copiar comandos prontos de execução | [Runbook](docs/experiments/runbook.md) |
+| Disparar carga federada | [Carga federada](docs/experiments/federation.md) |
+| Validar detalhadamente o ambiente | [Checklist de testes](docs/experiments/validation.md) |
+| Consultar origem e unidade das métricas | [Catálogo de métricas](docs/experiments/metrics.md) |
+| Executar em container | [Docker](docs/docker.md) |
+| Diagnosticar uma falha | [Solução de problemas](docs/troubleshooting.md) |
 
 ## Visão geral
 
@@ -55,8 +60,8 @@ results/
 - Python 3.11–3.14;
 - Poetry 2.x;
 - acesso ao homeserver Matrix;
-- acesso ao Prometheus que coleta os workers Synapse desejados; os jobs são
-  descobertos dinamicamente pelas métricas disponíveis.
+- acesso ao Prometheus que coleta os workers Synapse desejados, caso métricas
+  remotas sejam habilitadas; os jobs são descobertos dinamicamente.
 
 ```console
 git clone <url-do-repositorio>
@@ -78,94 +83,38 @@ cp setup_homeserver/.env.example setup_homeserver/.env
 setup_homeserver/run_all.sh 150
 ```
 
-2. Coloque pelo menos um JPG em `images/` para o workload com imagens.
-
-3. Configure o Prometheus com scrape de 2 s, conforme o
-   [catálogo de métricas](experiments/METRICS.md#configuração-do-scrape-interval).
-
-4. Execute a campanha:
+2. Execute primeiro o smoke test sem Prometheus:
 
 ```console
 poetry run python experiments/run_factorial.py \
   --host https://matrix-test.example.com \
-  --prometheus-url http://172.27.176.1:9091 \
   --data-dir data/homeserver \
-  --repetitions 3
+  --loads 5 \
+  --workloads text_only \
+  --repetitions 1 \
+  --stabilization 10 \
+  --measurement-duration 20 \
+  --samples 6 \
+  --cooldown 0 \
+  --no-prometheus \
+  --output-dir results/smoke-locust-only
 ```
 
-O padrão usa carga controlada: 0,2 ação/s por usuário, 15% de imagens no
-cenário misto, mensagens variáveis de 10 palavras, três repetições e cooldown
-de 60 s. O tamanho fixo mantém o fatorial comparável; os perfis `short`,
-`mixed` e `long` estão documentados no [guia de experimentos](experiments/README.md#ritmo-das-ações).
+3. Escolha a campanha no [runbook](docs/experiments/runbook.md):
 
-Durante a campanha, o terminal informa célula e fase atuais, percentual,
-tempo decorrido e ETA a cada 10 segundos. Esse histórico é salvo em
-`results/campaign.log`; consulte a seção
-[Acompanhar a execução](experiments/README.md#acompanhar-a-execução) para
-personalizar o intervalo.
+| Situação | Característica principal |
+|---|---|
+| Smoke test | Uma célula curta, sem Prometheus |
+| Carga baixa | 10/25 usuários e frequência controlada |
+| Fatorial recomendado | 50/100/150 usuários, cinco repetições e Prometheus |
+| Locust-only | Mesmo fatorial com `--no-prometheus` |
+| Stress máximo | Sem espera entre ações com `--max-throughput` |
+| Stress progressivo | População e frequência controlada maiores |
+| Retomada | Preserva células prontas com `--skip-existing` |
 
-O `/sync` usa long polling de 30 s por padrão. Seu tempo de resposta é coletado
-separadamente: os resultados preservam o agregado bruto com `/sync`, oferecem
-um agregado de primeiro plano sem `/sync` e métricas próprias para texto,
-imagem e upload.
-
-## Modos de carga
-
-### Carga controlada
-
-```console
-poetry run python experiments/run_factorial.py \
-  --host https://matrix-test.example.com \
-  --message-rate 0.2 \
-  --image-ratio 0.15
-```
-
-Os intervalos entre ações são aleatórios, com distribuição exponencial e média
-de cinco segundos por usuário. No workload misto, 85% das ações são texto e
-15% são imagem.
-
-### Capacidade máxima
-
-```console
-poetry run python experiments/run_factorial.py \
-  --host https://matrix-test.example.com \
-  --max-throughput
-```
-
-Nesse modo não existe espera entre ações: cada usuário inicia a próxima assim
-que a anterior termina. Use uma pasta de resultados diferente para não misturar
-campanhas com modelos de carga distintos:
-
-```console
---output-dir results/max-throughput
-```
-
-## Execução direta do Locust
-
-Para exploração manual, sem o fatorial:
-
-```console
-MATRIX_DATA_DIR=data/homeserver \
-  poetry run python run.py locust-run-users.py \
-  --host https://matrix-test.example.com
-```
-
-O runner fatorial é recomendado para resultados científicos porque registra
-configuração, dataset, timestamps, métricas e ordem randomizada.
-
-## Reprodutibilidade estatística
-
-Cada execução coleta 31 pontos na janela estacionária de 120 s. Esses pontos
-são correlacionados e são resumidos em uma média por execução. ANOVA, IC 95% e
-Tukey usam as execuções independentes, não os 31 pontos como réplicas.
-
-```text
-31 amostras → 1 resumo de execução
-3 repetições × 6 células → 18 unidades experimentais
-```
-
-Use `--repetitions 5` quando precisar de maior poder estatístico. Com cooldown
-de 60 s, cinco repetições duram aproximadamente 2 h 11 min 30 s.
+Para carga em mais de um homeserver, siga o [guia de carga federada](docs/experiments/federation.md).
+O desenho estatístico e o significado dos parâmetros ficam em
+[experiments/design.md](docs/experiments/design.md).
 
 ## Segurança
 
@@ -182,18 +131,17 @@ matrix_locust/              cliente e usuários Locust
 setup_homeserver/           preparação de servidor único
 setup_federation/           preparação federada
 experiments/                executor, análise e documentação
+docs/                       documentação centralizada
+    ├── README.md           índice completo
+    ├── docker.md           execução em container
+    ├── troubleshooting.md diagnóstico por sintoma
+    ├── setup/              preparação dos datasets
+    └── experiments/        runbook, desenho, métricas e federação
 data/                       datasets locais ignorados pelo Git
 results/                    resultados ignorados pelo Git
-test-suites/                suítes legadas do runner original
 ```
 
-## Solução rápida de problemas
+## Solução de problemas
 
-- `locust not found`: execute `poetry install` e use `poetry run`.
-- `No JPG test images`: adicione um arquivo `images/*.jpg` ou rode apenas
-  `--workloads text_only`.
-- HTTP 429: ajuste os rate limits do Synapse ou reduza a carga.
-- Métrica vazia: confirme `instance`, labels, targets e scrape do Prometheus.
-- Carga solicitada não atingida: examine `locust.log` e erros de login/sync.
-- Poucos valores do Prometheus: confirme `count_over_time(up[2m])`; para
-  scrape de 2 s o resultado esperado é aproximadamente 60.
+Consulte [docs/troubleshooting.md](docs/troubleshooting.md) para
+erros do Locust, Prometheus, Synapse, setup e federação.

@@ -4,9 +4,9 @@ Este pipeline prepara usuários de dois ou mais homeservers em salas mistas.
 Quando um usuário envia um evento, o Synapse precisa replicá-lo aos outros
 servidores participantes.
 
-- [README principal](../README.md)
-- [Setup de um único homeserver](../setup_homeserver/README.md)
-- [Execução e análise dos experimentos](../experiments/README.md)
+- [README principal](../../README.md)
+- [Setup de um único homeserver](homeserver.md)
+- [Execução e análise dos experimentos](../experiments/design.md)
 
 ## Como o cenário funciona
 
@@ -83,6 +83,23 @@ MATRIX_DATA_DIR=data/federation
 FED_EXPORTS_DIR=data/federation/exports
 ```
 
+`FED_HOMESERVERS` aceita quantos participantes forem necessários, separados
+por vírgula, mas exige no mínimo dois. Para cada nome da lista deve existir um
+trio `FED_<NOME>_URL`, `FED_<NOME>_DOMAIN` e `FED_<NOME>_PREFIX`. Por exemplo,
+para acrescentar um terceiro servidor:
+
+```dotenv
+FED_HOMESERVERS=home01,home02,home03
+
+FED_HOME03_URL=https://srv.home03.example.com
+FED_HOME03_DOMAIN=home03.example.com
+FED_HOME03_PREFIX=userh03
+```
+
+Os nomes podem conter letras, números, `_` e `-`, começando por uma letra.
+Como `-` é convertido em `_` ao formar as variáveis, não misture nomes que
+colidam, como `sao-paulo` e `sao_paulo`.
+
 ### URL não é necessariamente DOMAIN
 
 | Campo | Finalidade | Exemplo |
@@ -114,7 +131,8 @@ variáveis do shell
 setup_federation/run_all.sh 300
 ```
 
-O total é distribuído entre os homeservers configurados. Para indicar qual
+O total é distribuído entre os homeservers configurados, preservando o total
+informado mesmo quando a divisão não é exata. Para indicar qual
 export deve ser destacado ao final:
 
 ```console
@@ -138,29 +156,17 @@ poetry run python setup_federation/07_verify_federation.py
 
 Convites federados podem demorar; aumente `--passes` se necessário.
 
-## Executar carga de um lado
+## Próximo passo: executar carga
 
-```console
-MATRIX_DATA_DIR=data/federation/exports/home01 \
-  poetry run python run.py locust-run-users.py \
-  --host https://srv.home01.example.com
-```
+Depois de validar a massa, escolha o modo de execução:
 
-O `home01` recebe a carga cliente e envia eventos federados ao `home02` porque
-as salas têm membros dos dois domínios.
+- [carga originada por um homeserver](../experiments/federation.md#carga-a-partir-de-um-lado);
+- [carga simultânea em dois ou mais homeservers](../experiments/federation.md#carga-simultânea-em-dois-lados);
+- [catálogo geral de campanhas](../experiments/runbook.md).
 
-Para usar o executor fatorial:
-
-```console
-poetry run python experiments/run_factorial.py \
-  --host https://srv.home01.example.com \
-  --data-dir data/federation/exports/home01 \
-  --output-dir results/federation-home01
-```
-
-O executor atual controla um `--host` por campanha. Carga simultânea dos dois
-lados exige duas instâncias coordenadas e deve usar diretórios de resultados
-separados.
+Cada processo Locust usa o export correspondente ao seu `--host`. Os comandos,
+a interpretação da carga global e a configuração do Prometheus ficam
+centralizados em [federation.md](../experiments/federation.md).
 
 ## Verificação durante ou depois do teste
 
@@ -187,23 +193,7 @@ afetar salas remotas; nunca a execute contra ambientes fora do escopo do teste.
 
 ## Problemas comuns
 
-### Convite remoto não chega
-
-Confirme DNS/delegação, certificado, porta de federação, whitelist e o valor de
-`DOMAIN`. Reexecute o passo 5 com mais passes.
-
-### Usuários tentam login no servidor errado
-
-Use o dataset exportado, não o `users.csv` completo:
-
-```text
-data/federation/exports/home01
-```
-
-### Todas as salas aparecem como não federadas
-
-Confira prefixos únicos, domínios nos MXIDs, aceite dos convites e a saída do
-passo 7 antes de iniciar medições.
+Consulte a seção de [problemas de federação](../troubleshooting.md#federação).
 
 ## Segurança
 

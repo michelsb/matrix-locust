@@ -20,6 +20,7 @@ Veja `.env.example` para a lista completa de variáveis suportadas.
 from __future__ import annotations
 
 import os
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -64,6 +65,7 @@ __all__ = [
 ]
 
 TOKENS_FIELDS = ["username", "user_id", "access_token", "next_batch"]
+HOMESERVER_KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*$")
 
 
 @dataclass
@@ -143,9 +145,34 @@ def load_federation_config() -> FederationConfig:
             f"para um teste de federação (encontrado: {keys})."
         )
 
+    duplicate_keys = sorted({key for key in keys if keys.count(key) > 1})
+    if duplicate_keys:
+        sys.exit(
+            "ERRO: FED_HOMESERVERS contém homeserver(s) repetido(s): "
+            f"{duplicate_keys}."
+        )
+
+    invalid_keys = [key for key in keys if not HOMESERVER_KEY_RE.fullmatch(key)]
+    if invalid_keys:
+        sys.exit(
+            "ERRO: os nomes em FED_HOMESERVERS devem começar com uma letra e "
+            "conter apenas letras, números, '_' ou '-'. "
+            f"Inválido(s): {invalid_keys}."
+        )
+
+    # '-' e '_' viram o mesmo nome de variável (ex.: foo-bar e foo_bar
+    # usam ambos FED_FOO_BAR_URL). Rejeitar a colisão evita que dois
+    # homeservers leiam silenciosamente a mesma configuração.
+    env_keys = [key.upper().replace("-", "_") for key in keys]
+    duplicate_env_keys = sorted({key for key in env_keys if env_keys.count(key) > 1})
+    if duplicate_env_keys:
+        sys.exit(
+            "ERRO: nomes de homeserver colidem nas variáveis FED_<HS>_*: "
+            f"{duplicate_env_keys}. Use nomes distintos também após trocar '-' por '_'."
+        )
+
     homeservers: Dict[str, Homeserver] = {}
-    for key in keys:
-        env_key = key.upper().replace("-", "_")
+    for key, env_key in zip(keys, env_keys):
         url = os.environ.get(f"FED_{env_key}_URL", "").strip().rstrip("/")
         domain = os.environ.get(f"FED_{env_key}_DOMAIN", "").strip()
         prefix = os.environ.get(f"FED_{env_key}_PREFIX", "").strip()

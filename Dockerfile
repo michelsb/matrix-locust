@@ -1,40 +1,45 @@
-# Build layer to clone the repository and install dependencies
-FROM python:3.11-alpine as builder
+# syntax=docker/dockerfile:1
 
-# Install git, gcc, and other build tools
-RUN apk add --no-cache curl git gcc libffi-dev musl-dev openssl-dev poetry python3-dev
+FROM python:3.14-slim AS builder
 
-# Set the working directory
-WORKDIR /usr/src/app
+ARG POETRY_VERSION=2.4.1
 
-# Clone the repository into the working directory
-RUN git clone https://gitlab.futo.org/load-testing/matrix-locust.git .
+ENV POETRY_NO_INTERACTION=1 \
+    POETRY_VIRTUALENVS_IN_PROJECT=1 \
+    POETRY_CACHE_DIR=/tmp/poetry-cache
 
-# Fix externally-managed-envrionment errors: https://stackoverflow.com/a/76641565
-RUN rm /usr/lib/python3.11/EXTERNALLY-MANAGED
+WORKDIR /app
 
-# Install the dependencies using Poetry without creating a virtual environment
-RUN poetry config virtualenvs.create false && \
-    poetry install --only main --no-root
+RUN pip install --no-cache-dir "poetry==${POETRY_VERSION}"
 
-# Main image
-FROM python:3.11-alpine
+# Copy dependency files first so this layer stays cached when only source code
+# changes.
+COPY pyproject.toml poetry.lock README.md ./
+RUN poetry install --only main --no-root --no-ansi \
+    && rm -rf "${POETRY_CACHE_DIR}"
 
-# Set the working directory
-WORKDIR /usr/src/app
 
-# Copy the cloned repository from the builder layer
-COPY --from=builder /usr/src/app .
+FROM python:3.14-slim AS runtime
 
-# Copy the installed Python packages from the builder layer
-COPY --from=builder /usr/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages/
-COPY --from=builder /usr/bin /usr/bin
+ARG UID=1000
+ARG GID=1000
 
-# Update the PATH environment variable to include the cloned repository directory
-ENV PATH="/usr/src/app:${PATH}"
+ENV PATH="/app/.venv/bin:${PATH}" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    MPLCONFIGDIR=/tmp/matplotlib
 
-# Expose web UI running from container
-EXPOSE 8089
+WORKDIR /app
 
-# No entrypoint, this line is kept to keep the container running to launch commands
-CMD ["tail", "-f", "/dev/null"]
+RUN groupadd --gid "${GID}" matrix-locust \
+    && useradd --uid "${UID}" --gid "${GID}" --create-home matrix-locust
+
+COPY --from=builder /app/.venv /app/.venv
+COPY --chown=matrix-locust:matrix-locust . .
+
+USER matrix-locust
+
+# An argument-less invocation prints help instead of starting an accidental
+# load test.
+ENTRYPOINT ["python", "experiments/run_factorial.py"]
+CMD ["--help"]
