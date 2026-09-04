@@ -1,0 +1,55 @@
+# OS and editors
+.DS_Store
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+build/
+dist/
+*.egg-info/
+.venv/
+venv/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+admin.json
+
+# Local datasets and setup output
+data/
+/users.csv
+/tokens.csv
+/rooms.json
+/rooms_status.csv
+/failed_users.txt
+setup_homeserver/*.csv
+setup_homeserver/rooms.json
+setup_homeserver/failed_users.txt
+setup_federation/*.csv
+setup_federation/rooms.json
+setup_federation/failed_users.txt
+utils/failed_users_*.txt
+utils/rooms*.json
+utils/tokens_*.csv
+utils/users*.csv
+
+# Generated experiment and Locust output
+results/
+locust_*.csv
+locust*.html
