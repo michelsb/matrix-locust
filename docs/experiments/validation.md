@@ -11,6 +11,7 @@ executar a campanha fatorial com a configuração recomendada.
 - [Comandos prontos de execução](runbook.md)
 - [Carga em homeservers federados](federation.md)
 - [Métricas e configuração do Prometheus](metrics.md)
+- [Tracing e métricas internas com Jaeger](jaeger.md)
 - [Solução de problemas](../troubleshooting.md)
 
 ## Configuração recomendada
@@ -68,14 +69,14 @@ print("imagens JPG:", len(images))
 Para as cargas recomendadas, `users.csv` e `tokens.csv` precisam ter pelo
 menos 150 registros. O cenário misto precisa de pelo menos um `images/*.jpg`.
 
-### Estado verificado em 29/08/2026
+### Critérios de aceite
 
-- Python 3.14.4 e Locust 2.46.3: disponíveis;
-- `users.csv`: 150 registros;
-- `tokens.csv`: 150 registros;
-- salas: 96;
-- imagens JPG: 4, entre aproximadamente 478 e 500 KiB;
-- endpoint Matrix `/_matrix/client/versions`: acessível.
+- `poetry install` e a compilação terminam sem erro;
+- `users.csv` e `tokens.csv` contêm pelo menos o maior valor de `--loads`;
+- existe pelo menos uma imagem JPG quando `text_and_image` é usado;
+- o endpoint Matrix `/_matrix/client/versions` responde;
+- os valores observados são registrados junto aos resultados, pois versões,
+  quantidade de usuários e topologia podem mudar entre campanhas.
 
 ## 2. Preflight do Prometheus
 
@@ -118,8 +119,7 @@ curl -fsS --get \
   http://172.27.176.1:9091/api/v1/query
 ```
 
-Com `scrape_interval: 2s`, cada série deve retornar aproximadamente 60. Esse
-foi o valor observado na verificação atual.
+Com `scrape_interval: 2s`, cada série deve retornar aproximadamente 60.
 
 Confira a métrica obrigatória de CPU:
 
@@ -129,9 +129,8 @@ curl -fsS --get \
   http://172.27.176.1:9091/api/v1/query
 ```
 
-O valor observado atualmente é 12. Um resultado vazio ou zero impede o
-executor de concluir a coleta; não é exigida uma quantidade específica ou um
-conjunto fixo de nomes.
+Um resultado vazio ou zero impede o executor de concluir a coleta; não é
+exigida uma quantidade específica ou um conjunto fixo de nomes.
 
 ## 3. Smoke test recomendado
 
@@ -199,9 +198,38 @@ results/smoke-test/all_samples.csv
 results/smoke-test/dataset_manifest.json
 results/smoke-test/users-10__text_only__rep-01/samples.csv
 results/smoke-test/users-10__text_only__rep-01/workload_stats.json
+results/smoke-test/users-10__text_only__rep-01/message_arrivals.csv
+results/smoke-test/users-10__text_only__rep-01/message_interarrival_observations.csv
+results/smoke-test/users-10__text_only__rep-01/message_interarrival_summary.csv
+results/smoke-test/users-10__text_only__rep-01/request_arrivals.csv
+results/smoke-test/users-10__text_only__rep-01/request_interarrival_observations.csv
+results/smoke-test/users-10__text_only__rep-01/request_interarrival_summary.csv
 results/smoke-test/users-10__text_and_image__rep-01/samples.csv
 results/smoke-test/users-10__text_and_image__rep-01/workload_stats.json
 ```
+
+Confirme que `samples.csv` contém `message_interarrival_time_ms` e que o número
+de observações T1 é uma unidade menor que o número de injeções dentro da janela.
+T1 deve existir mesmo quando Prometheus e Jaeger estiverem desabilitados.
+
+Confirme também as colunas `request_interarrival_all_ms`,
+`request_interarrival_foreground_ms` e `request_interarrival_sync_ms`. No
+resumo por escopo, `all` inclui `/sync` e `foreground` o exclui. Um escopo com
+menos de duas requisições pode legitimamente não ter uma linha de resumo.
+
+Em campanhas com Jaeger, confirme também:
+
+```console
+test -f results/<campanha>/EXPERIMENT_REPORT.md
+test -f results/<campanha>/analysis/data_quality.csv
+find results/<campanha> -path '*/jaeger/DATA_QUALITY.md' -print
+```
+
+Para T2/T3, o catálogo atual deve conter `nginx_proxy_client_overhead` e
+`nginx_worker_connection_latency`. A presença de
+`nginx_proxy_worker_allocation_latency` fora dos diretórios de backup indica
+uma campanha ainda não migrada; use o procedimento de
+[reanálise offline](jaeger.md#reanalisar-campanhas-com-a-definicao-disjunta-de-t2t3).
 
 Valide os CSVs e JSONs automaticamente:
 

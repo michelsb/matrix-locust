@@ -151,11 +151,33 @@ retomada. Para múltiplos homeservers, use [federation.md](federation.md).
 | `--measurement-duration` | `120` | Duração da janela medida |
 | `--samples` | `31` | Pontos temporais por execução |
 | `--no-prometheus` | desativado | Executa sem preflight nem métricas remotas |
+| `--prometheus-timeout` | `30` | Timeout de cada consulta HTTP ao Prometheus |
+| `--prometheus-retries` | `3` | Novas tentativas com backoff após falha do Prometheus |
 | `--cpu-rate-window` | `30s` | Janela usada por `rate()` no Prometheus |
+| `--jaeger-url` | vazio | Ativa spans internos na mesma janela experimental |
+| `--jaeger-metrics` | vazio | Seleciona métricas e resolve automaticamente serviços/operações |
+| `--jaeger-sampling-rate` | vazio | Registra, sem alterar o servidor, a probabilidade de sampling configurada |
+| `--jaeger-operations` | contextual | Acrescenta spans genéricos fora do catálogo semântico |
+| `--no-jaeger` | desativado | Desabilita explicitamente o Jaeger |
 | `--data-dir` | `data/homeserver` | Dataset do setup |
 | `--output-dir` | `results` | Destino de resultados e análises |
 | `--skip-analysis` | desativado | Não gera a análise ao final |
 | `--skip-existing` | desativado | Retoma campanha sem refazer células concluídas |
+
+As métricas do proxy usadas como T2 e T3 não se sobrepõem: T2 é
+`nginx_proxy_client_overhead`, enquanto T3 é
+`nginx_worker_connection_latency`. A segunda pode ser zero quando o NGINX
+reutiliza uma conexão upstream. Consulte as
+[fórmulas e limitações](metrics.md#correspondencia-com-t2t7).
+
+T1 não depende do tracing: `message_interarrival_time_ms` é sempre calculado a
+partir dos instantes monotônicos registrados antes de cada envio `m.text` ou
+`m.image`. Ambos os envios de cada intervalo precisam pertencer à janela medida.
+
+Para diagnosticar a cadência HTTP, métricas auxiliares `request_interarrival_*`
+separam `all`, `foreground` (sem `/sync`), `sync`, `text_send`, `image_send`,
+`media_upload` e `other`. Somente `message_interarrival_time_ms` corresponde ao
+T1 definido como intervalo entre chegadas de mensagens.
 
 Consulte todas as opções com:
 
@@ -202,9 +224,12 @@ poetry run python experiments/run_factorial.py \
 ```
 
 O mesmo acompanhamento fica persistido em `results/campaign.log`. A saída
-detalhada do Locust permanece no `locust.log` de cada célula. O ETA considera
-as execuções e os cooldowns planejados; consultas finais ao Prometheus e a
-análise estatística podem acrescentar algum tempo.
+detalhada do Locust permanece no `locust.log` de cada célula. O primeiro ETA
+usa as fases e os cooldowns planejados. Durante a primeira coleta remota e ao
+final de cada célula, ele incorpora o overhead observado de Prometheus e
+Jaeger e o projeta para as células restantes. A estimativa não retrocede quando
+uma coleta posterior é mais rápida. A análise estatística final ainda pode
+acrescentar algum tempo depois da última célula.
 
 ## Resultados gerados
 
@@ -238,7 +263,8 @@ results/
 ```
 
 `metadata.json` registra fases, parâmetros, comando, consultas PromQL e hashes
-do dataset. `all_samples.csv` reúne as 31 observações de todas as execuções.
+do dataset. `all_samples.csv` reúne as observações configuradas por
+`--samples` de todas as execuções.
 `run_summaries.csv` contém a unidade experimental usada nos testes
 estatísticos.
 
@@ -296,6 +322,12 @@ poetry run python experiments/analyze_results.py results/all_samples.csv \
 Para interpretar cada métrica e conferir sua origem, continue em
 [Métricas, origem e análise estatística](metrics.md).
 
+Para campanhas com Jaeger, leia primeiro `EXPERIMENT_REPORT.md` e depois os
+`DATA_QUALITY.md` das repetições. Uma classificação `FAIL` invalida a utilização
+inferencial da métrica afetada, mas não apaga seus dados brutos. Campanhas
+antigas com a T3 composta podem ser corrigidas pelo procedimento de
+[reanálise offline](jaeger.md#reanalisar-campanhas-com-a-definicao-disjunta-de-t2t3).
+
 ## Boas práticas de comparação
 
 - Não altere dataset, configuração do Synapse ou infraestrutura durante uma
@@ -304,5 +336,6 @@ Para interpretar cada métrica e conferir sua origem, continue em
   diferentes.
 - Mantenha o cooldown suficiente para o sistema retornar ao estado basal.
 - Guarde `metadata.json` e `dataset_manifest.json` junto dos resultados.
+- Preserve `message_arrivals.csv`; ele é a fonte auditável de T1.
 - Examine falhas e tempos de resposta, não apenas RPS; throughput alto com erros não
   representa capacidade útil.

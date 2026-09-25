@@ -109,6 +109,14 @@ echo "home01=$status_home01 home02=$status_home02"
 O stdout pode aparecer intercalado, mas cada processo mantém seu próprio
 `campaign.log`.
 
+## Soak test de 8 horas com carga baixa
+
+O launcher [`experiments/run_federation_soak.sh`](../../experiments/run_federation_soak.sh)
+executa os dois lados em paralelo, encerra ambos ao receber `Ctrl+C` e permite
+coleta com ou sem Prometheus. Configuração, validação, execução e recuperação
+estão centralizadas no
+[guia específico do soak test federado](federation-soak/README.md).
+
 ## Prometheus nos dois lados
 
 Remova `--no-prometheus`. Com um Prometheus central, use a mesma URL e uma

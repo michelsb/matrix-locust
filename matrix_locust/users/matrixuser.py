@@ -29,6 +29,8 @@ import json
 import logging
 from http import HTTPStatus
 import mimetypes
+import time
+from pathlib import Path
 
 from locust import task, between, TaskSet, FastHttpUser
 from locust import events
@@ -55,6 +57,7 @@ if TOKENS_CSV.exists():
         tokens_dict.pop("username") # Dict includes the header values, so remove it
 
 locust_users = []
+request_arrivals = []
 PERSIST_TOKENS = os.environ.get("MATRIX_PERSIST_TOKENS", "true").strip().lower() \
     in {"1", "true", "yes", "on"}
 
@@ -95,7 +98,8 @@ def on_test_stop(environment, **_kwargs):
 
 @events.test_start.add_listener
 def on_test_start(environment, **_kwargs):
-    global locust_users
+    global locust_users, request_arrivals
+    request_arrivals = []
     if isinstance(environment.runner, MasterRunner):
         print("Loading users and sending to workers")
         with USERS_CSV.open("r", encoding="utf-8") as csvfile:
@@ -110,6 +114,24 @@ def on_test_start(environment, **_kwargs):
 
                 print(f"Sending {len(users)} users to {client_id}")
                 environment.runner.send_message("load_users", users, client_id)
+
+
+@events.test_stop.add_listener
+def write_request_arrivals(environment, **_kwargs):
+    """Persist request-start timestamps for endpoint inter-arrival analysis."""
+    output = os.environ.get("MATRIX_REQUEST_ARRIVALS_PATH")
+    if not output:
+        return
+    path = Path(output)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fields = ("sequence", "epoch_ns", "monotonic_ns", "method", "endpoint", "user")
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        for sequence, row in enumerate(
+            sorted(request_arrivals, key=lambda item: item["monotonic_ns"]), 1
+        ):
+            writer.writerow({"sequence": sequence, **row})
 
 ################################################################################
 
@@ -133,6 +155,19 @@ class MatrixUser(FastHttpUser):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.reset_client()
+
+    def rest(self, method, url, *args, **kwargs):
+        """Record the exact local request start before delegating to Locust."""
+        endpoint = kwargs.get("name") or url.split("?", 1)[0]
+        matrix_client = getattr(self, "matrix_client", None)
+        request_arrivals.append({
+            "epoch_ns": time.time_ns(),
+            "monotonic_ns": time.monotonic_ns(),
+            "method": str(method).upper(),
+            "endpoint": endpoint,
+            "user": getattr(matrix_client, "user", "") or "",
+        })
+        return super().rest(method, url, *args, **kwargs)
 
     # Review done with UIA implementation
     def _handle_register_response(self, response: RegisterResponse) -> None:

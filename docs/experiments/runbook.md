@@ -4,7 +4,8 @@ Este é o catálogo canônico de comandos para executar campanhas. Para entender
 o desenho fatorial e a análise estatística, consulte o
 [guia de experimentos](design.md). Para métricas, consulte
 [metrics.md](metrics.md). Para múltiplos servidores, consulte
-[federation.md](federation.md).
+[federation.md](federation.md). Para medir operações internas do Synapse na
+mesma janela, consulte [Coleta de tracing com Jaeger](jaeger.md).
 
 ## Antes de executar
 
@@ -20,6 +21,24 @@ no dataset. O workload `text_and_image` também exige pelo menos um JPG em
 
 Use um `--output-dir` exclusivo para cada campanha. Não misture resultados com
 cargas, ritmos ou fontes de métricas diferentes.
+
+T1 (`message_interarrival_time_ms`) é sempre coletado, inclusive com
+`--no-prometheus` e sem Jaeger. Não existe uma opção para habilitá-lo: o runner
+registra todas as tentativas de envio e falha a célula caso não consiga formar
+ao menos um intervalo dentro da janela.
+
+O runner ainda calcula cadências HTTP auxiliares. Use
+`request_interarrival_all_ms` para todas as requisições e
+`request_interarrival_foreground_ms` para excluir `/sync`.
+`request_interarrival_sync_ms` mede o intervalo entre inícios de long polls;
+não é T1 nem a taxa de chegada de mensagens.
+
+Em campanhas Jaeger, solicite `event_persister_processing_latency` para gerar
+T6 automaticamente por repetição. Com sampling de 10%, registre
+`--jaeger-sampling-rate 0.1`. Depois da execução, confira
+`collection_status.csv`: apenas células com `cell_status=complete` devem ser
+usadas para inferência. `execution_provenance.json` registra versões, commit e
+argumentos usados.
 
 ## Prometheus opcional
 
@@ -108,6 +127,62 @@ poetry run python experiments/run_factorial.py \
   --no-prometheus \
   --output-dir results/factorial-locust-only
 ```
+
+## Latências internas com Jaeger
+
+Este perfil mede 50 usuários, texto e 0,2 ação/s por usuário. As métricas
+selecionadas determinam automaticamente o conjunto mínimo de serviços e
+operações; não passe `--jaeger-services` nem `--jaeger-operations`.
+
+```console
+poetry run python experiments/run_factorial.py \
+  --host https://matrix-test.atlab.ufc.br \
+  --data-dir data/homeserver \
+  --loads 50 \
+  --workloads text_only \
+  --spawn-rate 5 \
+  --message-rate 0.2 \
+  --repetitions 5 \
+  --stabilization 60 \
+  --measurement-duration 180 \
+  --samples 31 \
+  --collection-buffer 5 \
+  --cooldown 60 \
+  --no-prometheus \
+  --jaeger-url http://10.101.53.46:16686 \
+  --jaeger-service-prefix matrix-test.atlab.ufc.br \
+  --jaeger-metrics \
+    request_authentication_latency \
+    generic_worker_processing_latency \
+    postgresql_session_verification_latency \
+    replication_dispatch_latency \
+    event_persister_pre_transaction_latency \
+    event_persister_processing_latency \
+    event_persistence_transaction_latency \
+    nginx_total_request_latency \
+    nginx_worker_connection_latency \
+    nginx_upstream_first_byte_latency \
+    nginx_upstream_processing_latency \
+    nginx_upstream_response_transfer_latency \
+    nginx_proxy_client_overhead \
+  --output-dir results/internal-latency-users-50-text-only
+```
+
+Antes da primeira célula, confira no stdout a linha `jaeger-plan`. Ao final,
+verifique se `collection_metadata.json` não registra erros ou saturações e se
+`derived_observations.csv` contém observações válidas. Consulte as
+[fórmulas e limitações](metrics.md#metricas-semanticas-do-jaeger).
+O runner também cria `DATA_QUALITY.md` em cada repetição e um
+`EXPERIMENT_REPORT.md` consolidado na raiz da campanha; não é necessário
+calcular manualmente cobertura, percentuais inválidos ou a classificação das
+métricas.
+O planejador descobre `matrix-nginx` além dos serviços Synapse, sem exigir
+`--jaeger-services` ou `--jaeger-operations`.
+Os resumos gerais do NGINX incluem visões `all`, `sync`, `foreground` e por
+endpoint. NGINX e Synapse usam sampling independente; nenhuma métrica mantida
+depende de correlacionar trace IDs ou relógios entre esses dois componentes.
+`replication_dispatch_latency` continua dependendo da propagação interna e dos
+relógios dos próprios workers Synapse.
 
 ## Stress com capacidade máxima
 

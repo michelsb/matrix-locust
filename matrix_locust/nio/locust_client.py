@@ -131,6 +131,7 @@ class ResponseCb:
     func: Callable = field()
     filter: Union[Tuple[Type], Type, None] = None
 
+
 class LocustClient(Client):
     """Matrix no-IO client.
 
@@ -192,7 +193,9 @@ class LocustClient(Client):
               name: str = None,
               *response_data,
     ):
-        headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+        headers = {
+            'Content-Type': 'application/json', 'Accept': 'application/json',
+        }
 
         if body is not None:
             body = json.loads(body)

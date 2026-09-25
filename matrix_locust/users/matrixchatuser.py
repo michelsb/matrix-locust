@@ -65,16 +65,29 @@ from nio.api import _FilterT
 
 
 workload_stats = {}
+message_arrivals = []
 
 
 def reset_workload_stats():
-    global workload_stats
+    global workload_stats, message_arrivals
     workload_stats = {
         "text": {"attempts": 0, "successes": 0, "failures": 0,
                  "body_bytes": 0, "words": 0, "word_count_histogram": {}},
         "image": {"attempts": 0, "upload_successes": 0, "send_successes": 0,
                   "failures": 0, "uploaded_bytes": 0, "files": {}},
     }
+    message_arrivals = []
+
+
+def record_message_arrival(message_type, user):
+    """Record injection just before room_send using one generator clock."""
+    message_arrivals.append({
+        "epoch_ns": time.time_ns(),
+        "monotonic_ns": time.monotonic_ns(),
+        "message_type": message_type,
+        "user": user or "",
+        "endpoint": f"/_matrix/client/v3/rooms/_/send/{message_type}",
+    })
 
 
 def histogram_percentile(histogram, percentile):
@@ -148,6 +161,19 @@ def write_workload_stats(environment, **_kwargs):
     path = Path(output)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    arrivals_output = os.environ.get("MATRIX_MESSAGE_ARRIVALS_PATH")
+    if arrivals_output:
+        arrivals_path = Path(arrivals_output)
+        arrivals_path.parent.mkdir(parents=True, exist_ok=True)
+        ordered = sorted(message_arrivals, key=lambda row: row["monotonic_ns"])
+        with arrivals_path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=(
+                "sequence", "epoch_ns", "monotonic_ns", "message_type", "user", "endpoint",
+            ))
+            writer.writeheader()
+            for sequence, row in enumerate(ordered, 1):
+                writer.writerow({"sequence": sequence, **row})
 
 # Load our images and thumbnails
 images_folder = "images"
@@ -436,6 +462,7 @@ class MatrixChatUser(MatrixUser):
             "body": message_text,
         }
 
+        record_message_arrival("m.text", self.matrix_client.user)
         response = self.matrix_client.room_send(
             room_id, "m.room.message", message_content,
             request_name="/_matrix/client/v3/rooms/_/send/m.text",
@@ -529,6 +556,7 @@ class MatrixChatUser(MatrixUser):
                 "size": len(image_data),
             },
         }
+        record_message_arrival("m.image", self.matrix_client.user)
         response = self.matrix_client.room_send(
             room_id, "m.room.message", message_content,
             request_name="/_matrix/client/v3/rooms/_/send/m.image",
